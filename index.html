@@ -218,7 +218,7 @@ body.hasScroll #scrollBar{display:block}body.hasScroll .topbar{top:26px}
 <div class="modal" id="idleBox" style="z-index:310"><div class="mbox" style="width:min(420px,92vw);margin-top:120px;text-align:center"><h3 id="idleMsg" style="margin:6px 0 16px;line-height:1.5;font-weight:600;white-space:pre-wrap"></h3><button id="idleClose" class="pri">Tab Close</button> <button id="idleStay">Stay Here</button></div></div>
 <div class="modal" id="connBox" style="z-index:300"><div class="mbox" style="width:min(380px,92vw);margin-top:120px;text-align:center"><h3 style="color:#b91c1c;margin:4px 0 10px">Please Reconnect First</h3>
   <div style="font-size:13px;margin-bottom:12px">The database folder is not connected. Everything stays inactive until you connect it.</div>
-  <div class="mrow" style="justify-content:center"><button class="pri" id="connGo" style="display:inline-block!important">Reconnect</button><button id="connOk" style="display:inline-block!important">OK</button></div></div></div>
+  <div class="mrow" style="justify-content:center"><button class="pri" id="connGo" style="display:inline-block!important">Reconnect</button><button id="connOk" disabled style="display:inline-block!important">OK</button></div></div></div>
 <div class="modal" id="mailBox"><div class="mbox" style="width:min(520px,94vw);margin-top:80px"><h3>Mail ready</h3>
   <div id="mailInfo" style="font-size:13px;line-height:1.7;margin:8px 0"></div>
   <div class="note" style="padding:0;line-height:1.6">Click <b>Open in Outlook</b> - the mail file (.eml) is downloaded.<br><b>One-time setup so it opens by itself:</b><br>1) In Chrome's download list click the small arrow next to the file and choose <b>Always open files of this type</b> (if it shows "Unverified download" click <b>Keep</b> first).<br>2) Windows: right-click an .eml file &rarr; <b>Open with</b> &rarr; <b>Outlook</b> &rarr; <b>Always</b>. (Use classic Outlook; Windows Mail / new Outlook may not open it as a draft.)<br>A web page cannot start Outlook by itself, these two settings make the download open automatically.</div>
@@ -595,7 +595,7 @@ function machineVisible(rep,m){ return m.active!==false || machineHasData(rep,m.
 let OLD_EDIT=false;
 const lockCut=()=>todayISO();   /* today and yesterday (reporting date) stay open */
 const dhakaHour=()=>new Date(Date.now()+6*3600e3).getUTCHours();
-const dateLocked=rd=>rd<lockCut()||(rd===lockCut()&&dhakaHour()>=13);   /* a report locks at 1:00 PM of its Reporting Date */   /* every reporting date before today is locked */
+const dateLocked=rd=>rd<lockCut()||(rd===lockCut()&&dhakaHour()>=11);   /* a report locks at 11:00 AM of its Reporting Date */   /* every reporting date before today is locked */
 const openDate=()=>addDays(todayISO(),-1);   /* production date whose Reporting Date is today */
 const newestKey=()=>Object.keys(DB.reports).sort().pop();
 function isLocked(){ return !!DB && !OLD_EDIT && !!cur() && dateLocked(cur().repDate); }
@@ -1692,7 +1692,7 @@ ${sheet}</body></html>`;
 }
 
 /* ===== XL: Excel that looks like the Print PDF ===== */
-function xlPrint(){
+function xlPrint(ret){
   const P=buildPrint(), rep=cur();
   const doc=new DOMParser().parseFromString(P.sheet,'text/html');
   const tx=el=>{ const c=el.cloneNode(true); c.querySelectorAll('br').forEach(b=>b.replaceWith('\n')); return c.textContent.replace(/ /g,' ').replace(/[ \t]+\n/g,'\n').replace(/[ \t]{2,}/g,' ').trim(); };
@@ -1763,6 +1763,7 @@ function xlPrint(){
    {name:'xl/workbook.xml',text:X+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Production Report" sheetId="1" r:id="rId1"/></sheets></workbook>'},
    {name:'xl/_rels/workbook.xml.rels',text:X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
    {name:'xl/styles.xml',text:styles},{name:'xl/worksheets/sheet1.xml',text:sheet}];
+  if(ret) return {blob:zipStore(files),name:P.title+'.xlsx'};
   dlBlob(zipStore(files),P.title+'.xlsx'); toast('XL downloaded');
 }
 function printReport(){
@@ -1989,12 +1990,12 @@ async function buildPdf(){
 }
 const b64u=u8=>{ let s=''; for(let i=0;i<u8.length;i+=0x8000) s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000)); return btoa(s); };
 const wrap76=t=>t.replace(/(.{76})/g,'$1\r\n');
-function buildEml(to,cc,subject,body,pdfBytes,pdfName){
+function buildEml(to,cc,subject,body,pdfBytes,pdfName,xl,js){
   const enc=new TextEncoder(), bd='----=_YDPR_'+Date.now().toString(36);
   const hdr=v=>/^[\x20-\x7e]*$/.test(v)?v:'=?UTF-8?B?'+b64u(enc.encode(v))+'?=';
   const L=[]; const ad=v=>v.split(/[;,]/).map(x=>x.trim()).filter(Boolean).join(', '); if(to) L.push('To: '+ad(to)); if(cc) L.push('Cc: '+ad(cc)); L.push('Subject: '+hdr(subject),'X-Unsent: 1','MIME-Version: 1.0','Content-Type: multipart/mixed; boundary="'+bd+'"','','--'+bd,
     'Content-Type: text/plain; charset=utf-8','Content-Transfer-Encoding: base64','',wrap76(b64u(enc.encode(body.replace(/\r?\n/g,'\r\n')))),'--'+bd,
-    'Content-Type: application/pdf; name="'+pdfName+'"','Content-Transfer-Encoding: base64','Content-Disposition: attachment; filename="'+pdfName+'"','',wrap76(b64u(pdfBytes)),'--'+bd+'--','');
+    'Content-Type: application/pdf; name="'+pdfName+'"','Content-Transfer-Encoding: base64','Content-Disposition: attachment; filename="'+pdfName+'"','',wrap76(b64u(pdfBytes)),...(js?['--'+bd,'Content-Type: application/json; name="'+js.name+'"','Content-Transfer-Encoding: base64','Content-Disposition: attachment; filename="'+js.name+'"','',wrap76(b64u(js.bytes))]:[]),...(xl?['--'+bd,'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="'+xl.name+'"','Content-Transfer-Encoding: base64','Content-Disposition: attachment; filename="'+xl.name+'"','',wrap76(b64u(xl.bytes))]:[]),'--'+bd+'--','');
   return new Blob([L.join('\r\n')],{type:'message/rfc822'});
 }
 $('btnMail').onclick=async()=>{
@@ -2003,11 +2004,13 @@ $('btnMail').onclick=async()=>{
   toast('Preparing the PDF ...'); recalc(); const rep=cur(); await loadCal(rep.repDate);
   const pdf=await buildPdf(); if(!pdf){ toast('PDF could not be created'); return; }
   const pdfBytes=new Uint8Array(await pdf.arrayBuffer()), ds=dmy(rep.repDate), name='Production_Report_'+ds+'.pdf';
+  let xl=null; try{ const r=xlPrint(true); if(r) xl={name:r.name,bytes:new Uint8Array(await r.blob.arrayBuffer())}; }catch(err){ console.error(err); toast('Excel could not be attached'); }
+  const js={name:DB_FILE,bytes:new TextEncoder().encode(JSON.stringify(DB,null,1))};
   const wa=summaryText().split('\n').map(l=>l.replace(/\*/g,'').replace(/^_+|_+$/g,'')).join('\n');
   const body=((mc.body||'').replace(/\s+$/,'')+'\n'.repeat(8)+wa).replace(/^\n+/,'');
   const subject=(mc.subject||'Yarn Dyeing Production Report').replace(/\{date\}/g,ds);
-  MAILJOB={blob:buildEml(mc.to,mc.cc||'',subject,body,pdfBytes,name),file:'Production_Report_'+ds+'.eml'};
-  $('mailInfo').innerHTML='<b>To:</b> '+esc(mc.to)+'<br>'+(mc.cc?'<b>CC:</b> '+esc(mc.cc)+'<br>':'')+'<b>Subject:</b> '+esc(subject)+'<br><b>Attachment:</b> '+esc(name)+' ('+Math.round(pdfBytes.length/1024)+' KB)';
+  MAILJOB={blob:buildEml(mc.to,mc.cc||'',subject,body,pdfBytes,name,xl,js),file:'Production_Report_'+ds+'.eml'};
+  $('mailInfo').innerHTML='<b>To:</b> '+esc(mc.to)+'<br>'+(mc.cc?'<b>CC:</b> '+esc(mc.cc)+'<br>':'')+'<b>Subject:</b> '+esc(subject)+'<br><b>Attachment:</b> '+esc(name)+' ('+Math.round(pdfBytes.length/1024)+' KB)'+(xl?'<br><b>Attachment:</b> '+esc(xl.name)+' ('+Math.round(xl.bytes.length/1024)+' KB)':'')+'<br><b>Attachment:</b> '+esc(js.name)+' ('+Math.round(js.bytes.length/1024)+' KB)';
   $('mailBox').style.display='flex';
 };
 let MAILJOB=null;
